@@ -532,7 +532,7 @@ def evalProgram(
 	scopeCopied = False # COW to avoid propagating definitions upwards
 
 	if isinstance(program, list):
-		pass
+		program = program.copy()
 	else:
 		program = [program]
 
@@ -540,7 +540,8 @@ def evalProgram(
 		raise ValueError("Evaluating an empty program")
 
 	result: typing.Optional[SchemeType] = None
-	for expr in program:
+	while program:
+		expr = program.pop(0)
 
 		if isinstance(expr, numbers.Number) or isinstance(expr, bool) \
 		or isinstance(expr, str) or isinstance(expr, SchemeChar) \
@@ -589,6 +590,8 @@ def evalProgram(
 						raise TypeError(f"A '{procId}' with {len(args)} arguments (expected at least 2)")
 					if not isinstance(args[0], SchemeList):
 						raise TypeError(f"Expected a list of assignment pairs in '{procId}'")
+
+					# binding variables
 					exprScope = scope.copy()
 					assignmentScope = exprScope if procId == "let*" else {}
 					for pair in args[0].values:
@@ -602,10 +605,19 @@ def evalProgram(
 						assignmentScope[symbol.name] = evalProgram(value, exprScope)
 					if assignmentScope is not exprScope:
 						exprScope.update(assignmentScope)
+
 					if len(args) == 2:
-						result = evalProgram(args[1], exprScope)
+						if not program: # tail
+							scope = exprScope
+							program.extend(args[1:])
+						else:
+							result = evalProgram(args[1], exprScope)
 					else:
-						result = evalProgram(list(args[1:]), exprScope)
+						if not program: # tail
+							scope = exprScope
+							program.extend(args[1:])
+						else:
+							result = evalProgram(list(args[1:]), exprScope)
 
 				elif procId == "lambda":
 					if len(args) < 2:
@@ -625,8 +637,12 @@ def evalProgram(
 						raise TypeError(f"A '{procId}' with {len(args)} arguments (expected at least 2)")
 					if not isinstance(args[-1], SchemeList):
 						raise TypeError(f"The last argument of '{procId}' must be a list, got {type(args[-1]).__name__}")
+
 					last = evalProgram(args[-1], scope)
-					result = evalProgram(SchemeList(args[:-1] + last.values), scope)
+					if not program: # tail
+						program.append(SchemeList(args[:-1] + last.values))
+					else:
+						result = evalProgram(SchemeList(args[:-1] + last.values), scope)
 
 				elif procId == "map":
 					if len(args) < 2:
@@ -653,34 +669,50 @@ def evalProgram(
 					result = SchemeList(tuple(result))
 
 				elif procId == "begin":
-					result = evalProgram(list(args))
+					if not program: # tail
+						program.extend(args)
+					else:
+						result = evalProgram(list(args), scope)
 
 				elif procId == "if":
 					if len(args) != 3:
 						raise TypeError(f"An '{procId}' with {len(args)} arguments (expected 3)")
 					condValue = evalProgram(args[0], scope)
+
 					if condValue is not False:
-						result = evalProgram(args[1], scope)
+						if not program: # tail
+							program.append(args[1])
+						else:
+							result = evalProgram(args[1], scope)
 					else:
-						result = evalProgram(args[2], scope)
+						if not program:
+							program.append(args[2])
+						else:
+							result = evalProgram(args[2], scope)
 
 				elif procId == "and":
 					result = True
-					for arg in args:
-						value = evalProgram(arg, scope)
-						if value is False:
-							result = False
-							break
+					for i, arg in enumerate(args, start=1):
+						if not program and i == len(args): # tail
+							program.append(arg)
 						else:
-							result = value
+							value = evalProgram(arg, scope)
+							if value is False:
+								result = False
+								break
+							else:
+								result = value
 
 				elif procId == "or":
 					result = False
-					for arg in args:
-						value = evalProgram(arg, scope)
-						if value is not False:
-							result = value
-							break
+					for i, arg in enumerate(args, start=1):
+						if not program and i == len(args): # tail
+							program.append(arg)
+						else:
+							value = evalProgram(arg, scope)
+							if value is not False:
+								result = value
+								break
 
 				# builtin procedures (eager)
 
@@ -705,7 +737,15 @@ def evalProgram(
 					                f" arguments, got {len(argValues)}")
 				for name, value in zip(procedure.arguments, argValues): #, strict=True):
 					subScope[name] = value
-				result = evalProgram(procedure.expr, subScope)
+
+				if not program: # tail
+					scope = subScope
+					if isinstance(procedure.expr, list):
+						program.extend(procedure.expr)
+					else:
+						program.append(procedure.expr)
+				else:
+					result = evalProgram(procedure.expr, subScope)
 
 			else:
 				raise TypeError(f"Cannot evaluate a {type(procedure).__name__} as a procedure")

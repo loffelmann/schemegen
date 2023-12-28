@@ -372,6 +372,88 @@ class ProcedureTest(EvalTestCase):
 			call(15, end=""),
 		])
 
+	def test_tailCall(self):
+		code = """
+		(define fun (lambda (n)
+			(if (> n 0)
+				(fun (- n 1))
+				42
+			)
+		))
+		(fun 10000)
+		"""
+		self.check(code, 42)
+
+		code = """
+		(define fun (lambda (n)
+			(if (<= n 0)
+				42
+				(let ((m (- n 1))) (fun m))
+			)
+		))
+		(fun 10000)
+		"""
+		self.check(code, 42)
+
+#		# ?? does not work, scoping is wrong
+#		code = """
+#		(define fun (lambda (n)
+#			(if (> n 0)
+#				(let ((m (- n 1))) (define o m) (fun o))
+#				42
+#			)
+#		))
+#		(fun 10000)
+#		"""
+#		self.check(code, 42)
+
+		code = """
+		(define fun (lambda (n)
+			(if (> n 0)
+				(apply fun (list (- n 1)))
+				42
+			)
+		))
+		(fun 10000)
+		"""
+		self.check(code, 42)
+
+		code = """
+		(define fun (lambda (n)
+			(if (> n 0)
+				(begin
+					(display "hi")
+					(fun (- n 1))
+				)
+				42
+			)
+		))
+		(fun 10000)
+		"""
+		self.check(code, 42)
+
+		code = """
+		(define fun (lambda (n)
+			(if (> n 0)
+				(and 1 (fun (- n 1)))
+				42
+			)
+		))
+		(fun 10000)
+		"""
+		self.check(code, 42)
+
+		code = """
+		(define fun (lambda (n)
+			(if (> n 0)
+				(or #f #f #f (fun (- n 1)))
+				42
+			)
+		))
+		(fun 10000)
+		"""
+		self.check(code, 42)
+
 	def test_integration(self):
 		code = """
 		(define fib (lambda (n)
