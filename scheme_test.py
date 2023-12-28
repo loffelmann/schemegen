@@ -37,11 +37,11 @@ class EvalTestCase(unittest.TestCase):
 		return evalProgram(program)
 
 	@patch("builtins.print")
-	def check(self, code, expectedResult, mockPrint, *, prints=None):
+	def check(self, code, expectedResult, mockPrint=None, *, prints=None):
 		program = parse(code)
 		result = evalProgram(program)
 		self.assertSchemeEqual(result, expectedResult, code)
-		if prints is not None:
+		if mockPrint is not None and prints is not None:
 			self.assertEqual(prints, mockPrint.mock_calls, "mismatching print calls")
 
 	def test_equalityTest(self):

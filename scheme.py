@@ -93,7 +93,9 @@ def checkArgs(procId, args, minNum=None, maxNum=None, validType=None):
 		if not (minNum <= len(args) <= maxNum):
 			raise TypeError(f"Wrong number of arguments for '{procId}': {len(args)}")
 	if validType and not all(isinstance(arg, validType) for arg in args):
-		raise TypeError(f"Non-numeric argument in '{procId}'")
+		for i, arg in enumerate(args, start=1):
+			if not isinstance(arg, validType):
+				raise TypeError(f"Invalid type of argument {i} in '{procId}': {type(arg).__name__}")
 
 def evalEagerBuiltin(
 	procId: str,
@@ -527,8 +529,10 @@ def evalProgram(
 	if scope is None:
 		scope = defaultScope.copy()
 
+	scopeCopied = False # COW to avoid propagating definitions upwards
+
 	if isinstance(program, list):
-		scope = scope.copy() # avoid propagating definitions upwards
+		pass
 	else:
 		program = [program]
 
@@ -574,6 +578,9 @@ def evalProgram(
 					name = args[0].name
 					if procId == "define" and name in scope:
 						raise RuntimeError(f"Redefining variable '{name}'")
+					if not scopeCopied:
+						scope = scope.copy()
+						scopeCopied = True
 					scope[name] = evalProgram(args[1], scope)
 					result = None
 
@@ -693,7 +700,9 @@ def evalProgram(
 				for arg in expr.values[1:]:
 					argValues.append(evalProgram(arg, scope))
 				subScope = scope.copy()
-				assert len(procedure.arguments) == len(argValues)
+				if len(procedure.arguments) != len(argValues):
+					raise TypeError(f"Lambda procedure expected {len(procedure.arguments)}"
+					                f" arguments, got {len(argValues)}")
 				for name, value in zip(procedure.arguments, argValues): #, strict=True):
 					subScope[name] = value
 				result = evalProgram(procedure.expr, subScope)
