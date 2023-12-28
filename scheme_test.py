@@ -299,6 +299,17 @@ class ProcedureTest(EvalTestCase):
 		(map mul3 (list 4 5) (list 10 20) (list 1 2))
 		""", SchemeList((40, 200)))
 
+		with self.assertRaises(TypeError):
+			self.eval("""
+				(define proc (lambda (a b) (+ a b)))
+				(proc 1)
+			""")
+		with self.assertRaises(TypeError):
+			self.eval("""
+				(define proc (lambda (a b) (+ a b)))
+				(proc 1 2 3)
+			""")
+
 	def test_sequence(self):
 		self.check("""
 		(begin
@@ -361,10 +372,7 @@ class ProcedureTest(EvalTestCase):
 			call(15, end=""),
 		])
 
-	# command sequences before main body
-	# begin
-
-	def test_recursion(self):
+	def test_integration(self):
 		code = """
 		(define fib (lambda (n)
 			(if (>= n 2)
@@ -375,6 +383,32 @@ class ProcedureTest(EvalTestCase):
 		(fib 10)
 		"""
 		self.check(code, 89)
+
+		code = """
+		(define smallest (lambda (list sofar)
+			(if (null? list)
+				sofar
+				(if (< (car list) sofar)
+					(smallest (cdr list) (car list))
+					(smallest (cdr list) sofar)
+				)
+			)
+		))
+		(smallest (list 10 5 9 4 8 3 7 2 6 1) 10000000)
+		"""
+		self.check(code, 1)
+
+		code = """
+		(define range (lambda (n) (range_helper n '())))
+		(define range_helper (lambda (n list)
+			(if (> n 0)
+				(range_helper (- n 1) (cons (- n 1) list))
+				list
+			)
+		))
+		(range 10)
+		"""
+		self.check(code, SchemeList(tuple(range(10))))
 
 
 
