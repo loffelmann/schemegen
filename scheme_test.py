@@ -172,13 +172,14 @@ class BuiltinFunctionTest(EvalTestCase):
 
 	def test_variable(self):
 		self.check("(define a 1) (define b 2) (list a b)", SchemeList((1, 2)))
-		with self.assertRaises(RuntimeError):
-			self.eval("(define a 1) (define a 2)")
+		self.check("(define a 1) (define a 2) a", 2)
 		self.check("(define a 1) (set! a 2) a", 2)
-		self.check("(set! a 1) (set! a 2) a", 2)
+		with self.assertRaises(ValueError):
+			self.eval("(set! a 1)")
 		self.check("(define a 1) (set! a 2) (set! a 3) a", 3)
-		with self.assertRaises(RuntimeError):
-			self.eval("(set! a 1) (define a 2)")
+		self.check("(define a 1) (begin (define a 2)) a", 1)
+		self.check("(define a 1) (begin (set! a 2)) a", 2)
+		self.check("(define a 1) (begin (define a 2) (set! a 3)) a", 1)
 
 		self.check("(let ((a 2)) (* a a))", 4)
 		self.check("(let ((a 2) (b 3)) (- b a))", 1)
@@ -395,17 +396,16 @@ class ProcedureTest(EvalTestCase):
 		"""
 		self.check(code, 42)
 
-#		# ?? does not work, scoping is wrong
-#		code = """
-#		(define fun (lambda (n)
-#			(if (> n 0)
-#				(let ((m (- n 1))) (define o m) (fun o))
-#				42
-#			)
-#		))
-#		(fun 10000)
-#		"""
-#		self.check(code, 42)
+		code = """
+		(define fun (lambda (n)
+			(if (> n 0)
+				(let ((m (- n 1))) (define o m) (fun o))
+				42
+			)
+		))
+		(fun 10000)
+		"""
+		self.check(code, 42)
 
 		code = """
 		(define fun (lambda (n)

@@ -529,7 +529,8 @@ def evalProgram(
 	if scope is None:
 		scope = defaultScope.copy()
 
-	scopeCopied = False # COW to avoid propagating definitions upwards
+	origScope = scope # COW to avoid propagating definitions upwards
+	localVars = set()
 
 	if isinstance(program, list):
 		program = program.copy()
@@ -571,18 +572,31 @@ def evalProgram(
 						raise TypeError(f"Applying 'quote' to {len(args)} values (expected 1)")
 					result = args[0]
 
-				elif procId in ("define", "set!"):
+				elif procId == "define":
+					if len(args) != 2:
+						raise TypeError(f"A '{procId}' with {len(args)} arguments (expected 2)")
+					if not isinstance(args[0], SchemeSymbol):
+						raise TypeError(f"Invalid type of identifier in '{procId}': {type(args[0]).__name__}")
+					if scope is origScope:
+						scope = scope.copy()
+					name = args[0].name
+					scope[name] = evalProgram(args[1], scope)
+					localVars.add(name)
+					result = None
+
+				elif procId == "set!":
 					if len(args) != 2:
 						raise TypeError(f"A '{procId}' with {len(args)} arguments (expected 2)")
 					if not isinstance(args[0], SchemeSymbol):
 						raise TypeError(f"Invalid type of identifier in '{procId}': {type(args[0]).__name__}")
 					name = args[0].name
-					if procId == "define" and name in scope:
-						raise RuntimeError(f"Redefining variable '{name}'")
-					if not scopeCopied:
-						scope = scope.copy()
-						scopeCopied = True
-					scope[name] = evalProgram(args[1], scope)
+					if name in scope:
+						scope[name] = evalProgram(args[1], scope)
+					else:
+						raise ValueError(f"'{procId}' setting an undefined variable")
+					if name not in localVars:
+						assert name in origScope, "Something wrong with localVars logic"
+						origScope[name] = scope[name]
 					result = None
 
 				elif procId in ("let", "let*"):
@@ -603,6 +617,7 @@ def evalProgram(
 						if not isinstance(symbol, SchemeSymbol):
 							raise TypeError(f"Invalid type of identifier in '{procId}': {type(symbol).__name__}")
 						assignmentScope[symbol.name] = evalProgram(value, exprScope)
+						localVars.add(symbol.name)
 					if assignmentScope is not exprScope:
 						exprScope.update(assignmentScope)
 
